@@ -1,0 +1,112 @@
+
+# Note:
+MG0002 Nasal and Oral metagenomes used fastp v.0.21.0. This version of fastp is for some reason unavailable online anymore for download, so for the HMP metagenomes fastp was used v0.22.0 
+
+
+# Fastp (v0.21.0 or v0.22.0)---------------------------------------------------------------------------------------------
+
+# change directory to where raw fastq files are
+cd /researchdrive_files/ReferenceData/HMP/nasaloral/Raw/
+
+# run fastp
+# for each file in the list, run fastp steps below
+for fastq in $(cat /researchdrive_files/ReferenceData/HMP/nasaloral/scripts/file_lists/samples.txt)
+do
+fastp \
+--in1 /researchdrive_files/ReferenceData/HMP/nasaloral/Raw/$fastq".denovo_duplicates_marked.trimmed.1.fastq.gz" \
+--out1 /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/$fastq".denovo_duplicates_marked.trimmed.1_fastp.fastq.gz" \
+--in2 /researchdrive_files/ReferenceData/HMP/nasaloral/Raw/$fastq".denovo_duplicates_marked.trimmed.2.fastq.gz" \
+--out2 /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/$fastq".denovo_duplicates_marked.trimmed.2_fastp.fastq.gz" \
+--detect_adapter_for_pe \
+-j /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/quality/$fastq".json" \
+-h /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/quality/$fastq".html"
+done
+
+
+
+# KneadData (v0.8.0)-------------------------------------------------------------------------------------------------
+
+for fastq in $(cat /researchdrive_files/ReferenceData/HMP/nasaloral/scripts/file_lists/samples.txt)
+
+do
+
+kneaddata \
+--input /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/$fastq".denovo_duplicates_marked.trimmed.1_fastp.fastq.gz" \
+--input /researchdrive_files/ReferenceData/HMP/nasaloral/Fastp/$fastq".denovo_duplicates_marked.trimmed.2_fastp.fastq.gz" \
+--reference-db /home/mhswaney/kneaddata_db/homo_sapiens/ \
+--output "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/" \
+--threads 8 \
+--max-memory 12000m \
+--run-fastqc-start \
+--run-fastqc-end \
+--bowtie2-options="--very-sensitive" \
+--run-trim-repetitive \
+--trimmomatic-options="SLIDINGWINDOW:4:15 MINLEN:50" \
+--sequencer-source "none" \
+--trimmomatic /usr/bin/Trimmomatic-0.39/
+
+kneaddata_read_count_table --input "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/" --output "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/"$fastq"_read_count_table".tsv
+
+#rm "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/"*.trimmed.*
+
+#rm "/researchdrive_files/ReferenceData/HMP/nasaloral/Kneaddata_Filtered/"$fastq"/"*bowtie2*
+
+rm "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/"*repeats*
+
+#echo Compressing...
+pigz -p 8 "/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/"$fastq"/"*.fastq
+
+done
+
+
+
+# Kraken2 (v2.0.8-beta) and Bracken (v2.5) -----------------------------------------------------------------------------
+
+#
+
+# this script runs kraken2 and bracken on each metagenomic sample
+# samples.txt is a text file where each line is the metagenomic sample identifier (ie. LKMB002-1-01_S5)
+
+# runs kraken2 on paired end reads 
+# runs bracken abundance estimation at the family, genus, and species levels
+
+# uses a custom kraken2 database - Standard database (bacteria, archaea, viruses,
+# Human, UniVec_Core, and plasmid RefSeq DBs) + RefSeq protozoa and fungi DBs
+# Also, manually edited DB to correctly assign Corynebacterium amycolatum instead
+# of C. jeikeium
+# Also includes the Kashaf 2021 Nat Micro novel skin genomes
+
+#
+
+echo kraken start
+
+cat /researchdrive_files/ReferenceData/HMP/nasaloral/scripts/file_lists/samples.txt | while read line
+do
+echo Starting $line
+/home/sroesemann/scripts/kraken2/kraken2 \
+--db /dev/shm/PlusPFMinusPlasmidUpdate/ \
+--threads 12 \
+--report ./kraken_results/$line.kreport2 \
+--paired \
+--gzip-compressed \
+--memory-mapping \
+/researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/$line/$line".denovo_duplicates_marked.trimmed.1_fastp_kneaddata_paired_1.fastq.gz" /researchdrive_files/ReferenceData/HMP/nasaloral/KneadData/$line/$line".denovo_duplicates_marked.trimmed.1_fastp_kneaddata_paired_2.fastq.gz" \
+> ./kraken_results/$line.kraken2
+done
+
+echo kraken finished
+
+echo bracken start
+
+cat /researchdrive_files/ReferenceData/HMP/nasaloral/scripts/file_lists/samples.txt | while read line
+
+do
+echo Starting $line
+/home/sroesemann/scripts/Bracken/bracken -d /researchdrive_files/Databases/Kraken2/kraken2DBmodified/PlusPFMinusPlasmidUpdate/ \
+-i ./kraken_results/$line.kreport2 \
+-o ./bracken_results/S_$line.bracken \
+-l 'S' -t 10 -r 100
+done
+
+echo Complete
+
