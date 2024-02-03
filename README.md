@@ -9,5 +9,5 @@ The raw metagenome sequencing reads from adult nasal and oral microbiomes used i
 
 Other raw data can be found in ./Raw_Data/
 
-# Derived Dataset
+# Derived Data
 Derived data can be found in ./Derived_Data/
