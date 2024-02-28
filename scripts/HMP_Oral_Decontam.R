@@ -2,12 +2,10 @@ library("phyloseq")
 library("ggplot2")
 library("readr")
 library("decontam")
-library("ape")
 library("gridExtra")
 library("vegan")
 library("ggvegan")
 library("dplyr")
-library("HMP")
 library("Matrix")
 library("reshape2")
 
@@ -26,9 +24,6 @@ SAM_nasaloralHMP <- sample_data(sampledata_nasaloralHMP, errorIfNULL = TRUE)
 OTU_nasaloralHMP = otu_table(otumat_nasaloralHMP, taxa_are_rows = TRUE)
 TAX_nasaloralHMP = tax_table(taxmat_nasaloralHMP)
 physeq_nasaloralHMP = phyloseq(OTU_nasaloralHMP, TAX_nasaloralHMP, SAM_nasaloralHMP, package="decontam")
-
-tree_nasaloralHMP = rtree(ntaxa(physeq_nasaloralHMP), rooted=TRUE, tip.label=taxa_names(physeq_nasaloralHMP))
-physeq_nasaloralHMP = phyloseq(OTU_nasaloralHMP, TAX_nasaloralHMP, SAM_nasaloralHMP, tree_nasaloralHMP, package="decontam")
 
 #subset oral
 physeq_oralHMP = subset_samples(physeq_nasaloralHMP, sample_body_site == "buccal mucosa")
@@ -62,6 +57,7 @@ length(get_taxa_unique(nc.oralHMP.clean.p, taxonomic.rank = "Species"))
 nc.oralHMP.clean.2 = tax_glom(nc.oralHMP.clean.p, "Species", NArm = TRUE)
 
 #ordination
-nc.oralHMP.clean.3.depth = transform_sample_counts(nc.oralHMP.clean.2, function(x) 1E5 * x/sum(x))
+standf = function(x) round(1E6 * (x / sum(x)))
+nc.oralHMP.clean.3.depth = transform_sample_counts(nc.oralHMP.clean.2, standf)
 
 
