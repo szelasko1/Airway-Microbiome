@@ -2,7 +2,6 @@ library("phyloseq")
 library("ggplot2")
 library("readr")
 library("decontam")
-library("ape")
 library("vegan")
 
 #import data from csv to phyloseq object
@@ -20,9 +19,6 @@ SAM_nasal <- sample_data(sampledata_nasal, errorIfNULL = TRUE)
 OTU_nasal = otu_table(otumat_nasal, taxa_are_rows = TRUE)
 TAX_nasal = tax_table(taxmat_nasal)
 physeq_nasal = phyloseq(OTU_nasal, TAX_nasal, SAM_nasal, package="decontam")
-
-tree_nasal = rtree(ntaxa(physeq_nasal), rooted=TRUE, tip.label=taxa_names(physeq_nasal))
-physeq_nasal = phyloseq(OTU_nasal, TAX_nasal, SAM_nasal, tree_nasal, package="decontam")
 
 #identify contaminants by prevalence
 sample_data(physeq_nasal)$is.neg <- sample_data(physeq_nasal)$Sample_or_Control == "Negative Control"
@@ -72,24 +68,21 @@ length(get_taxa_unique(nc.nasal.clean.p, taxonomic.rank = "Species"))
 nc.nasal.clean.2 = tax_glom(nc.nasal.clean.p, "Species", NArm = TRUE)
 
 #rarify
-nc.nasal.clean.3.depth = transform_sample_counts(nc.nasal.clean.2, function(x) 1E5 * x/sum(x))
+standf = function(x) round(1E6 * (x / sum(x)))
+nc.nasal.clean.3.depth = transform_sample_counts(nc.nasal.clean.2, standf)
 
-#identify top 5 phyla - nasal
-phylum.sum = tapply(taxa_sums(nc.nasal.clean.3.depth), 
-                    tax_table(nc.nasal.clean.3.depth)[, "Phylum"], sum, na.rm=TRUE)
-top5phyla = names(sort(phylum.sum, TRUE))[1:5]
-nc.nasal.clean.3.depth_5 = prune_taxa((tax_table(nc.nasal.clean.3.depth)[, "Phylum"] %in% top5phyla),
-                                      nc.nasal.clean.3.depth)
+#bacterial reads only
+bac.nc.nasal.clean.3.depth = subset_taxa(nc.nasal.clean.3.depth, Superkingdom == "Bacteria")
 
 #NMDS ordination - nasal
-dist = phyloseq::distance(nc.nasal.clean.3.depth_5, method="wunifrac")
-ordination = ordinate(nc.nasal.clean.3.depth_5, method="NMDS", distance= dist)
-plot_ordination(nc.nasal.clean.3.depth_5, ordination, type = "samples")
+dist = phyloseq::distance(nc.nasal.clean.3.depth, method="bray")
+ordination = ordinate(nc.nasal.clean.3.depth, method="NMDS", distance= dist)
+plot_ordination(nc.nasal.clean.3.depth, ordination, type = "samples")
 
 #ANOSIM - nasal
-dist = phyloseq::distance(nc.nasal.clean.3.depth_5, method="wunifrac")
-ordination = ordinate(nc.nasal.clean.3.depth_5, method="NMDS", distance= dist)
-metadata <- data.frame(sample_data(nc.nasal.clean.3.depth_5))
+dist = phyloseq::distance(nc.nasal.clean.3.depth, method="bray")
+ordination = ordinate(nc.nasal.clean.3.depth, method="NMDS", distance= dist)
+metadata <- data.frame(sample_data(nc.nasal.clean.3.depth))
 
   wu_pna_n <- anosim(dist, metadata$pneumonia_gr, permutations = 10000)
   wu_URI_n <- anosim(dist, metadata$anyresp_num_gr, permutations = 10000)
@@ -97,15 +90,15 @@ metadata <- data.frame(sample_data(nc.nasal.clean.3.depth_5))
   wu_RSV_n <- anosim(dist, metadata$SickSwab_RSV_Gr, permutations = 10000)
 
 #alpha diversity  - nasal
-alpha_div <- estimate_richness(physeq = nc.nasal.clean.p)
-metadata <- sample_data(object = nc.nasal.clean.p) %>% 
+alpha_div <- estimate_richness(physeq = nc.nasal.clean.3.depth)
+metadata <- sample_data(object = nc.nasal.clean.3.depth) %>% 
   data.frame(.) 
 stopifnot( all( rownames(metadata) == rownames(alpha_div) ) )
 alpha_div_metadata <- cbind(alpha_div, metadata)
 
 alpha_div_metadata_median <- alpha_div_metadata %>% 
   group_by(pneumonia_gr) %>% 
-  summarise_at(vars(Observed, Chao1, ACE, Shannon, InvSimpson, Fisher), median) %>% 
+  summarise_at(vars(Observed, Shannon, InvSimpson, Fisher), median) %>% 
   as.data.frame(.)
 alpha_div_metadata_median
 
