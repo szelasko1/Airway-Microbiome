@@ -21,9 +21,6 @@ OTU_oral = otu_table(otumat_oral, taxa_are_rows = TRUE)
 TAX_oral = tax_table(taxmat_oral)
 physeq_oral = phyloseq(OTU_oral, TAX_oral, SAM_oral, package="decontam")
 
-tree_oral = rtree(ntaxa(physeq_oral), rooted=TRUE, tip.label=taxa_names(physeq_oral))
-physeq_oral = merge_phyloseq(physeq_oral, sampledata_oral, tree_oral)
-
 #identify contaminants by prevalence
 sample_data(physeq_oral)$is.neg <- sample_data(physeq_oral)$Sample_or_Control == "Negative Control"
 contamdf.prev.oral <- isContaminant(physeq_oral, method="prevalence", neg="is.neg", threshold = 0.15)
@@ -62,25 +59,22 @@ length(get_taxa_unique(nc.oral.clean.p, taxonomic.rank = "Species"))
 nc.oral.clean.2 = tax_glom(nc.oral.clean.p, "Species", NArm = TRUE)
 
 #rarify
-nc.oral.clean.3.depth = transform_sample_counts(nc.oral.clean.2, function(x) 1E5 * x/sum(x))
+standf = function(x) round(1E6 * (x / sum(x)))
+nc.oral.clean.3.depth = transform_sample_counts(nc.oral.clean.2, standf)
 
-#identify top 5 phyla - oral
-phylum.sum = tapply(taxa_sums(nc.oral.clean.3.depth), 
-                    tax_table(nc.oral.clean.3.depth)[, "Phylum"], sum, na.rm=TRUE)
-top5phyla = names(sort(phylum.sum, TRUE))[1:5]
-nc.oral.clean.3.depth_5 = prune_taxa((tax_table(nc.oral.clean.3.depth)[, "Phylum"] %in% top5phyla),
-                                     nc.oral.clean.3.depth)
-
+#bacteria only
+bac.nc.nasal.clean.3.depth = subset_taxa(nc.oral.clean.3.depth, Superkingdom == "Bacteria")
+                                               
 #NMDS ordination - oral
-dist = phyloseq::distance(nc.oral.clean.3.depth_5, method="wunifrac")
-ordination = ordinate(nc.oral.clean.3.depth_5, method="NMDS", distance= dist)
+dist = phyloseq::distance(nc.oral.clean.3.depth, method="bray")
+ordination = ordinate(nc.oral.clean.3.depth, method="NMDS", distance= dist)
 
-plot_ordination(nc.oral.clean.3.depth_5, ordination, type = "samples")
+plot_ordination(nc.oral.clean.3.depth, ordination, type = "samples")
 
 #ANOSIM - oral
-dist = phyloseq::distance(nc.oral.clean.3.depth_5, method="wunifrac")
-ordination = ordinate(nc.oral.clean.3.depth_5, method="NMDS", distance= dist)
-metadata <- data.frame(sample_data(nc.oral.clean.3.depth_5))
+dist = phyloseq::distance(nc.oral.clean.3.depth, method="bray")
+ordination = ordinate(nc.oral.clean.3.depth, method="NMDS", distance= dist)
+metadata <- data.frame(sample_data(nc.oral.clean.3.depth))
   
   wu_pna_o <- anosim(dist, metadata$pneumonia_gr, permutations = 10000)
   wu_URI_o <- anosim(dist, metadata$anyresp_num_gr, permutations = 10000)
@@ -88,15 +82,15 @@ metadata <- data.frame(sample_data(nc.oral.clean.3.depth_5))
   wu_RSV_o <- anosim(dist, metadata$SickSwab_RSV_Gr, permutations = 10000)
 
 #alpha diversity - oral
-alpha_div <- estimate_richness(physeq = nc.oral.clean.p)
-metadata <- sample_data(object = nc.oral.clean.p) %>% 
+alpha_div <- estimate_richness(physeq = nc.oral.clean.3.depth)
+metadata <- sample_data(object = nc.oral.clean.3.depth) %>% 
   data.frame(.) 
 stopifnot( all( rownames(metadata) == rownames(alpha_div) ) )
 alpha_div_metadata <- cbind(alpha_div, metadata)
 
 alpha_div_metadata_median <- alpha_div_metadata %>% 
   group_by(pneumonia_gr) %>% 
-  summarise_at(vars(Observed, Chao1, ACE, Shannon, InvSimpson, Fisher), median) %>% 
+  summarise_at(vars(Observed, Shannon, InvSimpson, Fisher), median) %>% 
   as.data.frame(.)
 alpha_div_metadata_median
 
